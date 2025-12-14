@@ -10,6 +10,7 @@ export interface Question {
 
 export interface QuizState {
   isActive: boolean;
+  quizType: 'PRACTICE' | 'EXAM'; // Added to distinguish modes
   currentQuestionIndex: number;
   score: number;
   answers: { questionId: string; selectedIndex: number; isCorrect: boolean }[];
