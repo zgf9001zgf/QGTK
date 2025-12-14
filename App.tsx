@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Question, QuizState, ViewMode } from './types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Question, QuizState, ViewMode, HistoryRecord } from './types';
 import { generateQuestions, explainQuestion } from './services/geminiService';
 import { Button } from './components/Button';
 import { PRELOADED_QUESTIONS } from './data/questions';
@@ -22,7 +22,7 @@ const GridIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height
 const ChevronLeftIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
 const ChevronRightIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
 const ChevronDownIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
-
+const ChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>;
 
 // --- Components ---
 
@@ -38,6 +38,143 @@ const ProgressBar = ({ current, total }: { current: number; total: number }) => 
   );
 };
 
+// --- SVG Charts ---
+
+// 1. Radar Chart Component
+const RadarChart = ({ data }: { data: { label: string; value: number }[] }) => {
+  if (data.length < 3) return <div className="text-center text-slate-400 py-10 text-xs">数据不足，无法生成雷达图</div>;
+  
+  const size = 200;
+  const center = size / 2;
+  const radius = (size / 2) - 30; // padding
+  const angleStep = (Math.PI * 2) / data.length;
+
+  const points = data.map((d, i) => {
+    const angle = i * angleStep - Math.PI / 2; // start from top
+    const r = (d.value / 100) * radius;
+    const x = center + r * Math.cos(angle);
+    const y = center + r * Math.sin(angle);
+    return `${x},${y}`;
+  }).join(' ');
+
+  const gridPoints = [1, 0.75, 0.5, 0.25].map(scale => {
+    return data.map((_, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      const r = scale * radius;
+      const x = center + r * Math.cos(angle);
+      const y = center + r * Math.sin(angle);
+      return `${x},${y}`;
+    }).join(' ');
+  });
+
+  return (
+    <div className="relative flex justify-center py-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Grid Background */}
+        {gridPoints.map((p, i) => (
+          <polygon key={i} points={p} fill="none" stroke="#e2e8f0" strokeWidth="1" />
+        ))}
+        {/* Axes */}
+        {data.map((_, i) => {
+          const angle = i * angleStep - Math.PI / 2;
+          const x = center + radius * Math.cos(angle);
+          const y = center + radius * Math.sin(angle);
+          return <line key={i} x1={center} y1={center} x2={x} y2={y} stroke="#e2e8f0" />;
+        })}
+        {/* Data Shape */}
+        <polygon points={points} fill="rgba(99, 102, 241, 0.2)" stroke="#6366f1" strokeWidth="2" />
+        {/* Labels */}
+        {data.map((d, i) => {
+          const angle = i * angleStep - Math.PI / 2;
+          const r = radius + 20;
+          const x = center + r * Math.cos(angle);
+          const y = center + r * Math.sin(angle);
+          return (
+            <text 
+              key={i} x={x} y={y} 
+              textAnchor="middle" dominantBaseline="middle" 
+              className="text-[10px] fill-slate-500 font-medium"
+            >
+              {d.label.length > 4 ? d.label.substring(0,4)+'..' : d.label}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+// 2. Line Chart Component (Accuracy Trend)
+const TrendChart = ({ data }: { data: { date: string; value: number }[] }) => {
+  if (data.length < 2) return <div className="text-center text-slate-400 py-10 text-xs">需更多数据生成趋势图</div>;
+
+  const width = 300;
+  const height = 150;
+  const padding = 20;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+
+  const points = data.map((d, i) => {
+    const x = padding + (i / (data.length - 1)) * innerWidth;
+    const y = height - padding - (d.value / 100) * innerHeight;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="w-full overflow-hidden">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        {/* Grid lines */}
+        <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#f1f5f9" strokeDasharray="4"/>
+        <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#f1f5f9" strokeDasharray="4"/>
+        <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#cbd5e1"/>
+        
+        {/* Line */}
+        <polyline points={points} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+        
+        {/* Dots */}
+        {data.map((d, i) => {
+          const x = padding + (i / (data.length - 1)) * innerWidth;
+          const y = height - padding - (d.value / 100) * innerHeight;
+          return <circle key={i} cx={x} cy={y} r="4" fill="white" stroke="#10b981" strokeWidth="2" />;
+        })}
+        
+        {/* Date Labels (First and Last) */}
+        <text x={padding} y={height - 2} className="text-[10px] fill-slate-400">{data[0].date.slice(5)}</text>
+        <text x={width-padding} y={height - 2} textAnchor="end" className="text-[10px] fill-slate-400">{data[data.length-1].date.slice(5)}</text>
+      </svg>
+    </div>
+  );
+};
+
+// 3. Bar Chart Component (Daily Count)
+const BarChart = ({ data }: { data: { date: string; value: number }[] }) => {
+    const width = 300;
+    const height = 120;
+    const padding = 20;
+    const barWidth = (width - padding * 2) / data.length * 0.6;
+    const maxVal = Math.max(...data.map(d => d.value), 10); // Minimum scale of 10
+  
+    return (
+      <div className="w-full overflow-hidden">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+          {data.map((d, i) => {
+            const h = (d.value / maxVal) * (height - padding * 2);
+            const x = padding + i * ((width - padding * 2) / data.length) + 5;
+            const y = height - padding - h;
+            return (
+                <g key={i}>
+                   <rect x={x} y={y} width={barWidth} height={h} rx="3" fill="#6366f1" opacity={0.8} />
+                   <text x={x + barWidth/2} y={y - 5} textAnchor="middle" className="text-[10px] fill-slate-500 font-bold">{d.value}</text>
+                   <text x={x + barWidth/2} y={height - 5} textAnchor="middle" className="text-[8px] fill-slate-400">{d.date.slice(5)}</text>
+                </g>
+            );
+          })}
+          <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#cbd5e1" />
+        </svg>
+      </div>
+    );
+};
+
 export default function App() {
   // --- State ---
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -45,6 +182,9 @@ export default function App() {
   
   const [wrongQuestionIds, setWrongQuestionIds] = useState<Set<string>>(new Set());
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  
+  // History State for Analytics
+  const [history, setHistory] = useState<HistoryRecord[]>([]);
 
   const [quizState, setQuizState] = useState<QuizState>({
     isActive: false,
@@ -65,6 +205,9 @@ export default function App() {
   
   // Controls the bottom sheet grid
   const [isQuestionGridOpen, setIsQuestionGridOpen] = useState(false);
+
+  // Timer Ref for Tracking Study Duration per Question
+  const questionStartTimeRef = useRef<number>(0);
 
   // --- Effects (Load/Save) ---
   useEffect(() => {
@@ -99,6 +242,10 @@ export default function App() {
         if (parsed.isActive) setQuizState(parsed);
       } catch (e) { }
     }
+    const savedHistory = localStorage.getItem('smartprep_history');
+    if (savedHistory) {
+      try { setHistory(JSON.parse(savedHistory)); } catch (e) { }
+    }
   }, []);
 
   useEffect(() => {
@@ -117,6 +264,17 @@ export default function App() {
     if (quizState.isActive) localStorage.setItem('smartprep_quiz_state', JSON.stringify(quizState));
     else localStorage.removeItem('smartprep_quiz_state');
   }, [quizState]);
+
+  useEffect(() => {
+     localStorage.setItem('smartprep_history', JSON.stringify(history));
+  }, [history]);
+
+  // Record start time when question changes
+  useEffect(() => {
+    if (view === 'QUIZ') {
+        questionStartTimeRef.current = Date.now();
+    }
+  }, [quizState.currentQuestionIndex, view]);
 
   // --- Handlers ---
   const toggleFavorite = (e: React.MouseEvent | null, id: string) => {
@@ -156,7 +314,7 @@ export default function App() {
       shuffledQuestions: q
     });
     setExplanation(null);
-    setIsQuestionGridOpen(false); // Reset grid state
+    setIsQuestionGridOpen(false);
     setView('QUIZ');
   };
 
@@ -165,6 +323,18 @@ export default function App() {
     if (quizState.answers.some(a => a.questionId === currentQ.id)) return;
 
     const isCorrect = selectedIndex === currentQ.correctAnswerIndex;
+    const duration = Date.now() - questionStartTimeRef.current;
+
+    // --- Analytics Logic: Save History ---
+    const newRecord: HistoryRecord = {
+        id: Math.random().toString(36).substr(2, 9),
+        questionId: currentQ.id,
+        category: currentQ.category || "综合",
+        isCorrect,
+        timestamp: Date.now(),
+        duration
+    };
+    setHistory(prev => [...prev, newRecord]);
 
     if (!isCorrect) {
       setWrongQuestionIds(prev => new Set(prev).add(currentQ.id));
@@ -190,7 +360,7 @@ export default function App() {
   const jumpToQuestion = (index: number) => {
     setExplanation(null);
     setQuizState(prev => ({ ...prev, currentQuestionIndex: index }));
-    setIsQuestionGridOpen(false); // Close grid after selection
+    setIsQuestionGridOpen(false);
   };
 
   const nextQuestion = () => {
@@ -246,6 +416,64 @@ export default function App() {
       setFavoriteIds(prev => { const s = new Set(prev); s.delete(id); return s; });
     }
   };
+
+  // --- Analytics Calculation Helpers ---
+  const analyticsData = useMemo(() => {
+    if (history.length === 0) return null;
+
+    // 1. Total Stats
+    const totalQuestions = history.length;
+    const correctCount = history.filter(h => h.isCorrect).length;
+    const accuracy = Math.round((correctCount / totalQuestions) * 100);
+    const totalDurationMs = history.reduce((sum, h) => sum + (h.duration || 0), 0);
+    const totalDurationMins = Math.round(totalDurationMs / 1000 / 60);
+
+    // 2. Daily Data (Last 7 days)
+    const today = new Date();
+    const last7Days: string[] = [];
+    for(let i=6; i>=0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        last7Days.push(d.toISOString().split('T')[0]);
+    }
+
+    const dailyMap = new Map<string, HistoryRecord[]>();
+    last7Days.forEach(dateStr => dailyMap.set(dateStr, []));
+    
+    history.forEach(h => {
+        const dateStr = new Date(h.timestamp).toISOString().split('T')[0];
+        if (dailyMap.has(dateStr)) {
+            dailyMap.get(dateStr)?.push(h);
+        }
+    });
+
+    const dailyTrend = last7Days.map(date => {
+        const dayRecords = dailyMap.get(date) || [];
+        const count = dayRecords.length;
+        const correct = dayRecords.filter(r => r.isCorrect).length;
+        const acc = count > 0 ? Math.round((correct / count) * 100) : 0;
+        return { date, count, acc };
+    });
+
+    // 3. Category Radar Data
+    const categoryMap = new Map<string, { total: number, correct: number }>();
+    history.forEach(h => {
+        const cat = h.category || "综合";
+        const current = categoryMap.get(cat) || { total: 0, correct: 0 };
+        categoryMap.set(cat, {
+            total: current.total + 1,
+            correct: current.correct + (h.isCorrect ? 1 : 0)
+        });
+    });
+
+    // Take top 6 categories or all if less
+    const radarData = Array.from(categoryMap.entries()).map(([label, stats]) => ({
+        label,
+        value: Math.round((stats.correct / stats.total) * 100)
+    })).slice(0, 6);
+
+    return { totalQuestions, accuracy, totalDurationMins, dailyTrend, radarData };
+  }, [history]);
 
   // --- Views ---
 
@@ -362,6 +590,19 @@ export default function App() {
           {/* Tools Grid */}
           <div className="grid grid-cols-1 gap-3">
              <button 
+              onClick={() => setView('REPORT')}
+              className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:border-emerald-200 transition active:scale-[0.98] group"
+             >
+               <div className="h-12 w-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 group-hover:scale-110 transition">
+                  <ChartIcon />
+               </div>
+               <div className="text-left">
+                  <h3 className="font-bold text-slate-800">学习报告</h3>
+                  <p className="text-xs text-slate-500">查看刷题统计、趋势分析及能力雷达图</p>
+               </div>
+             </button>
+
+             <button 
               onClick={() => setView('AI_GENERATOR')}
               className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:border-indigo-200 transition active:scale-[0.98] group"
              >
@@ -405,7 +646,66 @@ export default function App() {
     </header>
   );
 
-  // 2. AI GENERATOR
+  // 2. REPORT VIEW (NEW)
+  if (view === 'REPORT') {
+    return (
+      <div className="max-w-md mx-auto h-full flex flex-col bg-slate-50">
+        <SubHeader title="学习报告" bgClass="bg-emerald-50" textClass="text-emerald-900" />
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+           {!analyticsData ? (
+             <div className="text-center py-20 text-slate-400">
+               <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">📊</div>
+               <p>暂无做题记录，快去练习吧！</p>
+             </div>
+           ) : (
+             <>
+               {/* Summary Cards */}
+               <div className="grid grid-cols-3 gap-2">
+                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 text-center">
+                    <div className="text-xs text-slate-400 font-bold mb-1">累计刷题</div>
+                    <div className="text-2xl font-black text-slate-800">{analyticsData.totalQuestions}</div>
+                 </div>
+                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 text-center">
+                    <div className="text-xs text-slate-400 font-bold mb-1">正确率</div>
+                    <div className="text-2xl font-black text-emerald-500">{analyticsData.accuracy}%</div>
+                 </div>
+                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 text-center">
+                    <div className="text-xs text-slate-400 font-bold mb-1">学习时长</div>
+                    <div className="text-2xl font-black text-indigo-500">{analyticsData.totalDurationMins}<span className="text-xs ml-1 font-medium text-slate-300">分</span></div>
+                 </div>
+               </div>
+
+               {/* Trend Chart (Bar) */}
+               <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
+                 <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                   <span className="w-2 h-2 rounded-full bg-indigo-500"></span> 每日刷题量 (近7天)
+                 </h3>
+                 <BarChart data={analyticsData.dailyTrend.map(d => ({ date: d.date, value: d.count }))} />
+               </div>
+
+               {/* Accuracy Trend (Line) */}
+               <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
+                 <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span> 正确率趋势 (近7天)
+                 </h3>
+                 <TrendChart data={analyticsData.dailyTrend.map(d => ({ date: d.date, value: d.acc }))} />
+               </div>
+
+               {/* Radar Chart */}
+               <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
+                 <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                   <span className="w-2 h-2 rounded-full bg-purple-500"></span> 能力雷达图
+                 </h3>
+                 <RadarChart data={analyticsData.radarData} />
+               </div>
+             </>
+           )}
+        </div>
+      </div>
+    );
+  }
+
+  // 3. AI GENERATOR
   if (view === 'AI_GENERATOR') {
     return (
       <div className="max-w-md mx-auto h-full flex flex-col bg-white">
@@ -450,7 +750,7 @@ export default function App() {
     );
   }
 
-  // 3. MANAGE / MISTAKES / FAVORITES LISTS
+  // 4. MANAGE / MISTAKES / FAVORITES LISTS
   if (view === 'MANAGE' || view === 'MISTAKES' || view === 'FAVORITES') {
     let listQuestions = questions;
     let themeColor = "slate";
@@ -545,7 +845,7 @@ export default function App() {
     );
   }
 
-  // 4. QUIZ VIEW
+  // 5. QUIZ VIEW
   if (view === 'QUIZ') {
     const isFinished = quizState.answers.length === quizState.shuffledQuestions.length && quizState.currentQuestionIndex >= quizState.shuffledQuestions.length;
     

@@ -16,9 +16,18 @@ export interface QuizState {
   shuffledQuestions: Question[];
 }
 
-export type ViewMode = 'DASHBOARD' | 'QUIZ' | 'MANAGE' | 'AI_GENERATOR' | 'MISTAKES' | 'FAVORITES';
+export type ViewMode = 'DASHBOARD' | 'QUIZ' | 'MANAGE' | 'AI_GENERATOR' | 'MISTAKES' | 'FAVORITES' | 'REPORT';
 
 export interface QuestionStats {
   totalAttempts: number;
   correctAttempts: number;
+}
+
+export interface HistoryRecord {
+  id: string;
+  questionId: string;
+  category: string;
+  isCorrect: boolean;
+  timestamp: number;
+  duration: number; // in milliseconds
 }
