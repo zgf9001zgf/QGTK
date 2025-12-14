@@ -1,6 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question } from "../types";
 
+// Declare process to satisfy TypeScript compiler since @types/node is not installed
+declare const process: {
+  env: {
+    API_KEY: string | undefined;
+  };
+};
+
 // Helper to generate a unique ID
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
