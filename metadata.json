@@ -1,0 +1,5 @@
+{
+  "name": "智能刷题助手 - AI 题库",
+  "description": "一个个人练习应用，支持管理题库、AI 自动出题以及进度跟踪。",
+  "requestFramePermissions": []
+}
